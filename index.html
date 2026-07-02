@@ -58,6 +58,7 @@ header{padding:22px 2px 14px}
 .ci{flex:0 0 auto;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:21px}
 .ci svg{display:block}
 .ci.energy{background:rgba(232,122,90,.16)}
+.ci.meds{background:rgba(219,140,170,.16)}
 .ci.work{background:rgba(111,155,213,.16)}
 .ci.mind{background:rgba(155,140,219,.16)}
 .ci.move{background:rgba(166,217,106,.16)}
@@ -332,6 +333,12 @@ const ENERGY_POINTS = [
 
 const TASKS = [
   {
+    id:'meds', cls:'meds', title:'Medication',
+    iconSvg:'<svg width="22" height="22" viewBox="-16 -16 32 32" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(-40)" fill="none" stroke="#db8caa" stroke-width="3"><rect x="-8" y="-13.5" width="16" height="27" rx="8"/><line x1="-8" y1="0" x2="8" y2="0"/></g></svg>',
+    sub:'Risperidone (Ashwagandha optional)',
+    type:'meds'
+  },
+  {
     id:'energy', cls:'energy', title:'Energy through the day',
     iconSvg:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e87a5a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,15 7,9 12,13 17,5 22,9"/></svg>',
     sub:'4 points — spot the slump',
@@ -373,6 +380,7 @@ function todayStr(){
 }
 function blankDay(){
   return {
+    meds:{risperidone:false, ashwagandha:false},
     energy:{},                // morning/midday/afternoon/evening -> 1..5
     mind:{mood:null,motivation:null,concentration:null,productivity:null},
     work:{start:null,end:null,trueHours:null,coffees:0,goalsDone:0,goalsTotal:0},
@@ -389,6 +397,7 @@ function today(){
   const d = DB.days[t];
   // backfill any missing keys
   const b = blankDay();
+  d.meds = Object.assign({}, b.meds, d.meds||{});
   d.energy = d.energy||{};
   d.mind = Object.assign({}, b.mind, d.mind||{});
   d.work = Object.assign({}, b.work, d.work||{});
@@ -401,6 +410,10 @@ function today(){
 function isTaskDone(taskId){ return dayTaskDone(today(), taskId); }
 function dayTaskDone(day, taskId){
   if(!day) return false;
+  if(taskId==='meds'){
+    // done when Risperidone (vital) is taken; Ashwagandha is optional
+    return !!(day.meds && day.meds.risperidone);
+  }
   if(taskId==='energy'){
     return ENERGY_POINTS.every(p=> day.energy && day.energy[p.id]);
   }
@@ -490,6 +503,14 @@ function rateGroup(scale, lv, groupKey, current){
 
 function buildBody(t,d){
   let html='<div class="divider"></div>';
+
+  if(t.type==='meds'){
+    html += `<div class="tick-row ${d.meds.risperidone?'on':''}" onclick="toggleMed('risperidone')">
+      <div class="stick">✓</div><div class="tlbl">Risperidone</div></div>`;
+    html += `<div class="tick-row ${d.meds.ashwagandha?'on':''}" onclick="toggleMed('ashwagandha')">
+      <div class="stick">✓</div><div class="tlbl">Ashwagandha <span style="color:var(--txt3);font-weight:400;font-size:12px">· optional</span></div></div>`;
+    html += `<div class="note">This card counts as done once <b>Risperidone</b> is ticked — that's the vital one. Ashwagandha is tracked but optional.</div>`;
+  }
 
   if(t.type==='energy'){
     html += `<div class="note">Rate your energy at each point of <b>today</b>. This is what shows you where the slump hits.</div>`;
@@ -609,6 +630,15 @@ function stepCoffee(delta){
   const d=today(); d.work.coffees=Math.max(0,d.work.coffees+delta);
   document.getElementById('coffeeVal').textContent=d.work.coffees; save();
 }
+function toggleMed(which){
+  const d=today();
+  d.meds[which]=!d.meds[which];
+  save();
+  const rows=document.querySelectorAll('#body-meds .tick-row');
+  if(rows[0]) rows[0].classList.toggle('on', d.meds.risperidone);
+  if(rows[1]) rows[1].classList.toggle('on', d.meds.ashwagandha);
+  refreshSub('meds'); updateHeader();
+}
 function toggleWent(which){
   const d=today();
   d.move._touched=true;
@@ -635,7 +665,12 @@ function refreshSub(id){
   const subEl=document.getElementById('sub-'+id);
   if(!subEl) return;
   const d=today();
-  if(id==='energy'){
+  if(id==='meds'){
+    const bits=[];
+    if(d.meds.risperidone) bits.push('Risperidone ✓');
+    if(d.meds.ashwagandha) bits.push('Ashwagandha ✓');
+    subEl.textContent = bits.length? bits.join(' · ') : t.sub;
+  }else if(id==='energy'){
     const n=ENERGY_POINTS.filter(p=>d.energy[p.id]).length;
     subEl.textContent = n? `${n}/4 points rated` : t.sub;
   }else if(id==='mind'){
@@ -1047,6 +1082,9 @@ function loadDemo(){
     const ds=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
     if(Math.random()<0.1 && i!==0) continue;
     const d=blankDay();
+    // meds: risperidone taken ~92% of days, ashwagandha ~70%
+    d.meds.risperidone = Math.random()<0.92;
+    d.meds.ashwagandha = Math.random()<0.70;
     // mood baseline for the day (1 best..5), drives correlations
     const moodBase=ri(1,5);
     d.mind.mood=Math.max(1,Math.min(5,moodBase+ri(-1,1)));
